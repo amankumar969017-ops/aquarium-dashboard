@@ -421,23 +421,24 @@
 
 <script>
     // ========== CONFIGURATION ==========
-    // Update these with your ThingSpeak Channel details!
-    const CHANNEL_ID = 3385978;  // Your new channel ID
-    const READ_API_KEY = "ZU96GV0LN7TMAXFZ";  // ✅ CORRECT - with quotes→ API Keys → Read API Key
+    const CHANNEL_ID = 3385978;
+    const READ_API_KEY = "ZU96GV0LN7TMAXFZ";
     
-    // Login credentials (you can change these)
+    // Login credentials
     const VALID_USERNAME = "admin";
     const VALID_PASSWORD = "1234";
     
-    // ThingSpeak Field Mapping
-    // Field 1: Temperature
-    // Field 2: TDS
-    // Field 3: pH
-    // Field 4: Pump (0/1)
-    // Field 5: Heater (0/1)
-    // Field 6: Light (0/1)
-    // Field 7: Water Level (0-3)
-    // Field 8: Feed Count
+    // ========== CHECK IF USER IS ALREADY LOGGED IN ==========
+    function checkLoginStatus() {
+        const isLoggedIn = localStorage.getItem("aquarium_logged_in");
+        if (isLoggedIn === "true") {
+            // User already logged in, show dashboard directly
+            document.getElementById("loginContainer").style.display = "none";
+            document.getElementById("dashboard").style.display = "block";
+            fetchData();
+            setInterval(fetchData, 15000);
+        }
+    }
     
     // ========== LOGIN FUNCTION ==========
     function login() {
@@ -446,6 +447,9 @@
         const errorMsg = document.getElementById("errorMsg");
         
         if (username === VALID_USERNAME && password === VALID_PASSWORD) {
+            // Save login status in browser
+            localStorage.setItem("aquarium_logged_in", "true");
+            
             document.getElementById("loginContainer").style.display = "none";
             document.getElementById("dashboard").style.display = "block";
             errorMsg.style.display = "none";
@@ -456,7 +460,11 @@
         }
     }
     
+    // ========== LOGOUT FUNCTION ==========
     function logout() {
+        // Clear login status from browser
+        localStorage.removeItem("aquarium_logged_in");
+        
         document.getElementById("loginContainer").style.display = "flex";
         document.getElementById("dashboard").style.display = "none";
         document.getElementById("username").value = "";
@@ -470,7 +478,6 @@
             const response = await fetch(url);
             const data = await response.json();
             
-            // Parse values
             const temperature = parseFloat(data.field1) || 0;
             const tds = parseFloat(data.field2) || 0;
             const ph = parseFloat(data.field3) || 0;
@@ -480,7 +487,6 @@
             const waterLevel = parseInt(data.field7) || 0;
             const feedCount = parseInt(data.field8) || 0;
             
-            // Update UI
             updateTemperature(temperature);
             updateTDS(tds);
             updatePH(ph);
@@ -491,7 +497,6 @@
             updateFeedCount(feedCount);
             updateTimestamp();
             
-            // Update system status
             document.getElementById("sysStatus").innerHTML = "🟢 ONLINE";
             document.getElementById("sysStatus").style.color = "#22c55e";
             
@@ -509,7 +514,6 @@
         percent = Math.min(100, Math.max(0, percent));
         document.getElementById("tempBar").style.width = percent + "%";
         
-        // Temperature color coding
         if (temp < 18) document.getElementById("tempValue").style.color = "#3b82f6";
         else if (temp > 32) document.getElementById("tempValue").style.color = "#ef4444";
         else document.getElementById("tempValue").style.color = "#22c55e";
@@ -521,7 +525,6 @@
         percent = Math.min(100, Math.max(0, percent));
         document.getElementById("tdsBar").style.width = percent + "%";
         
-        // TDS color coding
         if (tdsValue > 800) document.getElementById("tdsValue").style.color = "#ef4444";
         else if (tdsValue > 500) document.getElementById("tdsValue").style.color = "#f59e0b";
         else document.getElementById("tdsValue").style.color = "#22c55e";
@@ -604,6 +607,9 @@
         const now = new Date();
         document.getElementById("timestamp").innerHTML = now.toLocaleTimeString('en-US');
     }
+    
+    // ========== PAGE LOAD - CHECK LOGIN STATUS ==========
+    checkLoginStatus();
     
     // Enter key support
     document.getElementById("password").addEventListener("keypress", function(e) {
