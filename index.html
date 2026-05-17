@@ -232,6 +232,22 @@
             color: white;
         }
 
+        .wc-status {
+            display: inline-block;
+            padding: 6px 18px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .wc-idle { background: #22c55e; color: white; }
+        .wc-drain { background: #f59e0b; color: white; }
+        .wc-flush { background: #3b82f6; color: white; }
+        .wc-fill { background: #06b6d4; color: white; }
+        .wc-resume { background: #8b5cf6; color: white; }
+        .wc-stop { background: #ef4444; color: white; }
+        .wc-error { background: #ef4444; color: white; animation: blink 0.5s infinite; }
+
         /* Equipment Grid */
         .equipment-grid {
             display: grid;
@@ -400,6 +416,19 @@
         </div>
     </div>
 
+    <!-- Water Change Status - NEW -->
+    <div class="stats-grid">
+        <div class="card">
+            <div class="card-title">💧 WATER CHANGE STATUS</div>
+            <div id="wcStatusDisplay" class="wc-status wc-idle" style="font-size: 20px; padding: 12px 24px;">IDLE</div>
+            <div style="margin-top: 15px; font-size: 14px; color: #94a3b8;">
+                Step: <span id="wcStep">0</span> | 
+                Errors: <span id="wcErrors">0</span>
+            </div>
+            <div style="margin-top: 10px; font-size: 12px;" id="wcMessage"></div>
+        </div>
+    </div>
+
     <!-- Water Level -->
     <div class="card">
         <div class="card-title">💧 WATER LEVEL</div>
@@ -424,6 +453,35 @@
     const CHANNEL_ID = 3385978;
     const READ_API_KEY = "ZU96GV0LN7TMAXFZ";
     
+    // Field Mapping:
+    // field1: Temperature
+    // field2: TDS
+    // field3: pH
+    // field4: Pump (0/1)
+    // field5: Heater (0/1)
+    // field6: Light (0/1)
+    // field7: Water Level (0-3) OR Water Change Step
+    // field8: Feed Count / Water Change Errors
+    
+    // Water Change Step Names
+    const WC_STEP_NAMES = {
+        0: "IDLE",
+        1: "STOP",
+        2: "DRAIN",
+        3: "FLUSH",
+        4: "FILL",
+        5: "RESUME"
+    };
+    
+    const WC_STEP_COLORS = {
+        0: "wc-idle",
+        1: "wc-stop",
+        2: "wc-drain",
+        3: "wc-flush",
+        4: "wc-fill",
+        5: "wc-resume"
+    };
+    
     // Login credentials
     const VALID_USERNAME = "admin";
     const VALID_PASSWORD = "1234";
@@ -432,7 +490,6 @@
     function checkLoginStatus() {
         const isLoggedIn = localStorage.getItem("aquarium_logged_in");
         if (isLoggedIn === "true") {
-            // User already logged in, show dashboard directly
             document.getElementById("loginContainer").style.display = "none";
             document.getElementById("dashboard").style.display = "block";
             fetchData();
@@ -447,9 +504,7 @@
         const errorMsg = document.getElementById("errorMsg");
         
         if (username === VALID_USERNAME && password === VALID_PASSWORD) {
-            // Save login status in browser
             localStorage.setItem("aquarium_logged_in", "true");
-            
             document.getElementById("loginContainer").style.display = "none";
             document.getElementById("dashboard").style.display = "block";
             errorMsg.style.display = "none";
@@ -462,9 +517,7 @@
     
     // ========== LOGOUT FUNCTION ==========
     function logout() {
-        // Clear login status from browser
         localStorage.removeItem("aquarium_logged_in");
-        
         document.getElementById("loginContainer").style.display = "flex";
         document.getElementById("dashboard").style.display = "none";
         document.getElementById("username").value = "";
@@ -484,7 +537,22 @@
             const pump = parseInt(data.field4) || 0;
             const heater = parseInt(data.field5) || 0;
             const light = parseInt(data.field6) || 0;
+            
+            // IMPORTANT: Decide what's in field7 and field8
+            // Option A: field7 = Water Level, field8 = Water Change Step
+            // Option B: field7 = Water Change Step, field8 = Water Change Errors
+            
+            // Using Option B (more common):
+            const wcStep = parseInt(data.field7) || 0;
+            const wcErrors = parseInt(data.field8) || 0;
+            
+            // If field7 is water level instead, uncomment below:
+            // const waterLevel = parseInt(data.field7) || 0;
+            // const wcStep = parseInt(data.field8) || 0;
+            
+            // For now, using water level from field7 (since your screenshot shows ERROR)
             const waterLevel = parseInt(data.field7) || 0;
+            
             const feedCount = parseInt(data.field8) || 0;
             
             updateTemperature(temperature);
@@ -495,6 +563,7 @@
             updateLight(light);
             updateWaterLevel(waterLevel);
             updateFeedCount(feedCount);
+            updateWaterChangeStatus(wcStep, wcErrors);
             updateTimestamp();
             
             document.getElementById("sysStatus").innerHTML = "🟢 ONLINE";
@@ -504,6 +573,51 @@
             console.error("Fetch error:", error);
             document.getElementById("sysStatus").innerHTML = "🔴 CONNECTION ERROR";
             document.getElementById("sysStatus").style.color = "#ef4444";
+        }
+    }
+    
+    // ========== UPDATE WATER CHANGE STATUS ==========
+    function updateWaterChangeStatus(step, errors) {
+        const stepName = WC_STEP_NAMES[step] || "UNKNOWN";
+        const stepClass = WC_STEP_COLORS[step] || "wc-idle";
+        
+        const wcDisplay = document.getElementById("wcStatusDisplay");
+        wcDisplay.innerHTML = stepName;
+        wcDisplay.className = `wc-status ${stepClass}`;
+        
+        document.getElementById("wcStep").innerHTML = step;
+        document.getElementById("wcErrors").innerHTML = errors;
+        
+        const wcMessage = document.getElementById("wcMessage");
+        if (step === 0) {
+            wcMessage.innerHTML = "✅ Water change idle. System normal.";
+            wcMessage.style.color = "#22c55e";
+        } else if (step === 1) {
+            wcMessage.innerHTML = "⏸️ Water change stopped. Check system.";
+            wcMessage.style.color = "#f59e0b";
+        } else if (step === 2) {
+            wcMessage.innerHTML = "💧 Draining water from tank...";
+            wcMessage.style.color = "#3b82f6";
+        } else if (step === 3) {
+            wcMessage.innerHTML = "💨 Flushing system...";
+            wcMessage.style.color = "#06b6d4";
+        } else if (step === 4) {
+            wcMessage.innerHTML = "💧 Filling tank with fresh water...";
+            wcMessage.style.color = "#06b6d4";
+        } else if (step === 5) {
+            wcMessage.innerHTML = "🔄 Resuming normal operation...";
+            wcMessage.style.color = "#8b5cf6";
+        }
+        
+        if (errors > 0) {
+            let errorMsg = "";
+            if (errors & 0x01) errorMsg += "Sensor Error ";
+            if (errors & 0x02) errorMsg += "Tank Empty ";
+            if (errors & 0x04) errorMsg += "Tank Full ";
+            if (errors & 0x08) errorMsg += "Dry Run ";
+            wcMessage.innerHTML = `⚠️ ERROR: ${errorMsg}`;
+            wcMessage.style.color = "#ef4444";
+            wcDisplay.className = "wc-status wc-error";
         }
     }
     
